@@ -18,10 +18,32 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/cache@v4
         with:
-          gradle-version: 8.14.3
+          path: ~/gradle-8.14.3
+          key: gradle-8.14.3
+      - name: Get Gradle 8.14.3 (keeps trying if a download server is down)
+        run: |
+          G="$HOME/gradle-8.14.3/bin/gradle"
+          for i in $(seq 1 15); do
+            [ -x "$G" ] && break
+            for url in \
+              https://downloads.gradle.org/distributions/gradle-8.14.3-bin.zip \
+              https://github.com/gradle/gradle-distributions/releases/download/v8.14.3/gradle-8.14.3-bin.zip \
+              https://services.gradle.org/distributions/gradle-8.14.3-bin.zip; do
+              echo "Trying $url"
+              if curl -fsSL --connect-timeout 20 --max-time 300 -o "$RUNNER_TEMP/gradle.zip" "$url" && unzip -q -o "$RUNNER_TEMP/gradle.zip" -d "$HOME"; then
+                break
+              fi
+            done
+            rm -f "$RUNNER_TEMP/gradle.zip"
+            [ -x "$G" ] && break
+            echo "All download servers failed (try $i of 15). Waiting 30 seconds."
+            sleep 30
+          done
+          [ -x "$G" ] || { echo "Could not download Gradle. Wait a while, then Re-run all jobs."; exit 1; }
       - name: Build
-        run: gradle build --stacktrace
+        run: ~/gradle-8.14.3/bin/gradle build --stacktrace
       - name: Keep only the mod jar
         run: rm -f build/libs/*-sources.jar
       - uses: actions/upload-artifact@v4
